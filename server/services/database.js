@@ -1,17 +1,34 @@
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase client with SERVICE KEY so server-side ops bypass RLS
-// ANON_KEY is for client-side (browser); SERVICE_KEY is for trusted server code
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+  console.error('❌ SUPABASE_URL and SUPABASE_ANON_KEY must be set in .env');
+  process.exit(1);
+}
+
+// Public client — used ONLY for connection health check
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_ANON_KEY
 );
 
-// Database connection test
+// Admin client — bypasses RLS for all server-side data operations
+// Falls back to ANON_KEY if SERVICE_KEY is missing (writes will hit RLS)
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+);
+
+if (!process.env.SUPABASE_SERVICE_KEY) {
+  console.warn('⚠️  SUPABASE_SERVICE_KEY not set — write operations may fail due to RLS!');
+}
+
+// Database connection test (uses ANON_KEY, always safe)
 async function connectDatabase() {
   try {
-    const { data, error } = await supabase.from('users').select('count').limit(1);
-    if (error && error.code !== 'PGRST116') { // PGRST116 = table doesn't exist yet
+    const { error } = await supabase.from('users').select('count').limit(1);
+    // PGRST116 = table not found (OK)
+    // 42501     = RLS blocked anon select (OK — means we're connected)
+    if (error && error.code !== 'PGRST116' && error.code !== '42501') {
       throw error;
     }
     console.log('✅ Supabase connected successfully');
@@ -22,15 +39,15 @@ async function connectDatabase() {
   }
 }
 
-// Graceful shutdown (not needed for Supabase but keeping for compatibility)
+// Graceful shutdown (not needed for Supabase but kept for compatibility)
 async function disconnectDatabase() {
   console.log('🔌 Supabase connection closed');
 }
 
-// User operations
+// ─── User operations ──────────────────────────────────────────────────────────
 const userService = {
   async createUser(email, passwordHash) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('users')
       .insert([
         {
@@ -48,20 +65,16 @@ const userService = {
   },
 
   async findUserByEmail(email) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('users')
-      .select(`
-        *,
-        devices (*)
-      `)
+      .select(`*, devices (*)`)
       .eq('email', email)
       .single();
 
     if (error && error.code !== 'PGRST116') {
       return null; // User not found
     }
-    
-    // Transform to match expected format
+
     if (data) {
       return {
         ...data,
@@ -74,18 +87,14 @@ const userService = {
   },
 
   async findUserById(id) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('users')
-      .select(`
-        *,
-        devices (*)
-      `)
+      .select(`*, devices (*)`)
       .eq('id', id)
       .single();
 
     if (error) return null;
-    
-    // Transform to match expected format
+
     if (data) {
       return {
         ...data,
@@ -98,10 +107,10 @@ const userService = {
   },
 };
 
-// Device operations
+// ─── Device operations ────────────────────────────────────────────────────────
 const deviceService = {
   async createDevice(userId, name, deviceApiKey, viewerApiKey) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('devices')
       .insert([
         {
@@ -123,19 +132,15 @@ const deviceService = {
 
   async findDeviceByApiKey(apiKey, type = 'device') {
     const column = type === 'device' ? 'device_api_key' : 'viewer_api_key';
-    
-    const { data, error } = await supabase
+
+    const { data, error } = await supabaseAdmin
       .from('devices')
-      .select(`
-        *,
-        users (*)
-      `)
+      .select(`*, users (*)`)
       .eq(column, apiKey)
       .single();
 
     if (error) return null;
-    
-    // Transform to match Prisma structure
+
     return {
       ...data,
       user: data.users,
@@ -150,18 +155,14 @@ const deviceService = {
   },
 
   async findDeviceById(id) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('devices')
-      .select(`
-        *,
-        users (*)
-      `)
+      .select(`*, users (*)`)
       .eq('id', id)
       .single();
 
     if (error) return null;
-    
-    // Transform to match Prisma structure
+
     return {
       ...data,
       user: data.users,
@@ -176,7 +177,7 @@ const deviceService = {
   },
 
   async updateDeviceStatus(id, isOnline) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('devices')
       .update({
         is_online: isOnline,
@@ -192,15 +193,14 @@ const deviceService = {
   },
 
   async getUserDevices(userId) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('devices')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    
-    // Transform to match Prisma structure
+
     return data.map(device => ({
       ...device,
       deviceApiKey: device.device_api_key,
@@ -214,18 +214,18 @@ const deviceService = {
   },
 
   async deleteDevice(id, userId) {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('devices')
       .delete()
       .eq('id', id)
       .eq('user_id', userId);
 
     if (error) throw error;
-    return { count: 1 }; // Supabase doesn't return count, but we assume success
+    return { count: 1 };
   },
 
   async regenerateApiKeys(id, userId, deviceApiKey, viewerApiKey) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('devices')
       .update({
         device_api_key: deviceApiKey,
@@ -241,10 +241,10 @@ const deviceService = {
   },
 };
 
-// Stream session operations
+// ─── Stream session operations ────────────────────────────────────────────────
 const streamService = {
   async startSession(deviceId) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('stream_sessions')
       .insert([
         {
@@ -260,11 +260,9 @@ const streamService = {
   },
 
   async endSession(deviceId) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('stream_sessions')
-      .update({
-        ended_at: new Date().toISOString()
-      })
+      .update({ ended_at: new Date().toISOString() })
       .eq('device_id', deviceId)
       .is('ended_at', null)
       .select();
@@ -274,7 +272,7 @@ const streamService = {
   },
 
   async getActiveSession(deviceId) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('stream_sessions')
       .select('*')
       .eq('device_id', deviceId)
@@ -290,6 +288,7 @@ const streamService = {
 
 module.exports = {
   supabase,
+  supabaseAdmin,
   connectDatabase,
   disconnectDatabase,
   userService,
