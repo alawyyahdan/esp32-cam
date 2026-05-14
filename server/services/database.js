@@ -1,9 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase client
+// Initialize Supabase client with SERVICE KEY so server-side ops bypass RLS
+// ANON_KEY is for client-side (browser); SERVICE_KEY is for trusted server code
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY
 );
 
 // Database connection test

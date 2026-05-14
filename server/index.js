@@ -18,6 +18,10 @@ const docsRoutes = require('./routes/docs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust first proxy (nginx, Render, etc.) so express-rate-limit
+// can correctly read client IP from X-Forwarded-For header
+app.set('trust proxy', 1);
+
 // Rate limiting (more permissive in development)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
