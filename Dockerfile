@@ -35,6 +35,9 @@ RUN mkdir -p /app/logs /app/uploads && chown nodejs:nodejs /app/logs /app/upload
 # Switch to non-root user
 USER nodejs
 
+# Set environment to production
+ENV NODE_ENV=production
+
 # Expose port
 EXPOSE 3000
 

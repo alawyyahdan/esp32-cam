@@ -1,3 +1,3 @@
-web: npm start
-release: npx prisma generate && npx prisma db push
+web: NODE_ENV=production npm start
+release: npm run setup
 

@@ -6,7 +6,15 @@
   "scripts": {
     "dev": "nodemon server/index.js",
     "start": "node server/index.js",
-    "setup": "node server/setup-db.js"
+    "setup": "node server/setup-db.js",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:dev": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop esp32-cam-streaming",
+    "pm2:restart": "pm2 restart esp32-cam-streaming",
+    "pm2:delete": "pm2 delete esp32-cam-streaming",
+    "pm2:logs": "pm2 logs esp32-cam-streaming",
+    "pm2:monit": "pm2 monit",
+    "pm2:status": "pm2 status"
   },
   "keywords": ["esp32", "cam", "streaming", "api", "nodejs"],
   "author": "",

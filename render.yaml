@@ -3,7 +3,7 @@ services:
     name: esp32-cam-streaming
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && npm run setup
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -26,6 +26,6 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
-    healthCheckPath: /
+    healthCheckPath: /api/health
     autoDeploy: true
     branch: main
