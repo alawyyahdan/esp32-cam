@@ -123,8 +123,22 @@ print_success "Dependencies installed"
 
 # Setup database
 print_status "Setting up Supabase database..."
-npm run setup
-print_success "Database setup completed"
+if npm run setup; then
+    print_success "Database setup completed"
+else
+    print_error "Database setup failed!"
+    echo ""
+    echo "🔧 MANUAL FIX REQUIRED:"
+    echo ""
+    echo "1. Go to Supabase SQL Editor:"
+    echo "   https://supabase.com/dashboard/project/_/sql"
+    echo ""
+    echo "2. Copy and run SQL from: database-setup.sql"
+    echo ""
+    echo "3. After running SQL, try deploy again: ./deploy.sh"
+    echo ""
+    exit 1
+fi
 
 # Create necessary directories
 print_status "Creating necessary directories..."
